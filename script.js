@@ -168,10 +168,35 @@ const container = document.getElementById('setter-holds-container');
 const colorPicker = document.getElementById('color-picker');
 const btnClearAll = document.getElementById('btn-clear-all');
 const btnLightUp = document.getElementById('btn-light-up');
+const btnPencil = document.getElementById('btn-tool-pencil');
+const btnEraser = document.getElementById('btn-tool-eraser');
+const boardSvg = document.getElementById('kilterboard-svg');
 
 // State: map of holdId (string) -> hexColor (string, e.g., "FF0000")
 let state = {};
 let isDrawing = false;
+let currentTool = 'pencil'; // 'pencil' | 'eraser'
+
+if (boardSvg) {
+    boardSvg.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDrawing = true;
+    });
+}
+
+if (btnPencil && btnEraser) {
+    btnPencil.addEventListener('click', () => {
+        currentTool = 'pencil';
+        btnPencil.classList.add('active');
+        btnEraser.classList.remove('active');
+    });
+
+    btnEraser.addEventListener('click', () => {
+        currentTool = 'eraser';
+        btnEraser.classList.add('active');
+        btnPencil.classList.remove('active');
+    });
+}
 
 document.addEventListener('mouseup', () => {
     isDrawing = false;
@@ -208,24 +233,38 @@ function render() {
             e.preventDefault();
             isDrawing = true;
             
-            // Toggle logic: if already this color, remove it. If different color or empty, set it.
-            const currentColor = state[id];
-            const selectedColor = colorPicker.value.substring(1).toUpperCase(); // Remove #
-
-            if (currentColor === selectedColor) {
+            if (currentTool === 'eraser') {
                 delete state[id];
                 circle.setAttribute("stroke", "transparent");
             } else {
-                state[id] = selectedColor;
-                circle.setAttribute("stroke", "#" + selectedColor);
+                // Pencil logic
+                // Toggle logic: if already this color, remove it. If different color or empty, set it.
+                const currentColor = state[id];
+                const selectedColor = colorPicker.value.substring(1).toUpperCase(); // Remove #
+
+                if (currentColor === selectedColor) {
+                    delete state[id];
+                    circle.setAttribute("stroke", "transparent");
+                } else {
+                    state[id] = selectedColor;
+                    circle.setAttribute("stroke", "#" + selectedColor);
+                }
             }
         });
 
         circle.addEventListener("mouseenter", () => {
             if (isDrawing) {
-                const selectedColor = colorPicker.value.substring(1).toUpperCase(); // Remove #
-                state[id] = selectedColor;
-                circle.setAttribute("stroke", "#" + selectedColor);
+                if (currentTool === 'eraser') {
+                    delete state[id];
+                    circle.setAttribute("stroke", "transparent");
+                } else {
+                    // Pencil mode - only paint if empty (don't overpaint)
+                    if (!state[id]) {
+                        const selectedColor = colorPicker.value.substring(1).toUpperCase(); // Remove #
+                        state[id] = selectedColor;
+                        circle.setAttribute("stroke", "#" + selectedColor);
+                    }
+                }
             }
         });
 
