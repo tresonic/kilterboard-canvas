@@ -176,12 +176,44 @@ const boardSvg = document.getElementById('kilterboard-svg');
 let state = {};
 let isDrawing = false;
 let currentTool = 'pencil'; // 'pencil' | 'eraser'
+let lastTouchedId = null;
 
 if (boardSvg) {
     boardSvg.addEventListener('mousedown', (e) => {
         e.preventDefault();
         isDrawing = true;
     });
+
+    // Touch handling for the board (dragging)
+    boardSvg.addEventListener('touchmove', (e) => {
+        e.preventDefault(); // Prevent scrolling
+        if (!isDrawing) return;
+
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+
+        if (target && target.tagName === 'circle' && target.hasAttribute('data-id')) {
+            const id = target.getAttribute('data-id');
+            if (id !== lastTouchedId) {
+                applyTool(id, target, true);
+                lastTouchedId = id;
+            }
+        }
+    }, { passive: false });
+
+    // Ensure drawing stops on touch end
+    boardSvg.addEventListener('touchend', () => {
+        isDrawing = false;
+        lastTouchedId = null;
+    });
+    
+    // Also handle touchstart on background to start "drawing" (dragging)
+    boardSvg.addEventListener('touchstart', (e) => {
+        if (e.target === boardSvg || e.target.tagName === 'image') {
+             e.preventDefault();
+             isDrawing = true;
+        }
+    }, { passive: false });
 }
 
 if (btnPencil && btnEraser) {
@@ -201,6 +233,39 @@ if (btnPencil && btnEraser) {
 document.addEventListener('mouseup', () => {
     isDrawing = false;
 });
+
+document.addEventListener('touchend', () => {
+    isDrawing = false;
+    lastTouchedId = null;
+});
+
+function applyTool(id, circle, isDrag) {
+    if (currentTool === 'eraser') {
+        delete state[id];
+        circle.setAttribute("stroke", "transparent");
+    } else {
+        // Pencil logic
+        const selectedColor = colorPicker.value.substring(1).toUpperCase(); // Remove #
+
+        if (isDrag) {
+            // Pencil mode - only paint if empty (don't overpaint)
+            if (!state[id]) {
+                state[id] = selectedColor;
+                circle.setAttribute("stroke", "#" + selectedColor);
+            }
+        } else {
+            // Toggle logic: if already this color, remove it. If different color or empty, set it.
+            const currentColor = state[id];
+            if (currentColor === selectedColor) {
+                delete state[id];
+                circle.setAttribute("stroke", "transparent");
+            } else {
+                state[id] = selectedColor;
+                circle.setAttribute("stroke", "#" + selectedColor);
+            }
+        }
+    }
+}
 
 function render() {
     if (container.children.length > 0) return;
@@ -232,41 +297,21 @@ function render() {
         circle.addEventListener("mousedown", (e) => {
             e.preventDefault();
             isDrawing = true;
-            
-            if (currentTool === 'eraser') {
-                delete state[id];
-                circle.setAttribute("stroke", "transparent");
-            } else {
-                // Pencil logic
-                // Toggle logic: if already this color, remove it. If different color or empty, set it.
-                const currentColor = state[id];
-                const selectedColor = colorPicker.value.substring(1).toUpperCase(); // Remove #
-
-                if (currentColor === selectedColor) {
-                    delete state[id];
-                    circle.setAttribute("stroke", "transparent");
-                } else {
-                    state[id] = selectedColor;
-                    circle.setAttribute("stroke", "#" + selectedColor);
-                }
-            }
+            applyTool(id, circle, false);
         });
 
         circle.addEventListener("mouseenter", () => {
             if (isDrawing) {
-                if (currentTool === 'eraser') {
-                    delete state[id];
-                    circle.setAttribute("stroke", "transparent");
-                } else {
-                    // Pencil mode - only paint if empty (don't overpaint)
-                    if (!state[id]) {
-                        const selectedColor = colorPicker.value.substring(1).toUpperCase(); // Remove #
-                        state[id] = selectedColor;
-                        circle.setAttribute("stroke", "#" + selectedColor);
-                    }
-                }
+                applyTool(id, circle, true);
             }
         });
+
+        circle.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            isDrawing = true;
+            lastTouchedId = id;
+            applyTool(id, circle, false);
+        }, { passive: false });
 
         container.appendChild(circle);
     }
