@@ -174,44 +174,100 @@ const boardSvg = document.getElementById('kilterboard-svg');
 
 // State: map of holdId (string) -> hexColor (string, e.g., "FF0000")
 let state = {};
-let isDrawing = false;
 let currentTool = 'pencil'; // 'pencil' | 'eraser'
+
+// Touch State
+let isDrawing = false;
+let isMultiTouch = false;
+let startId = null;
+let hasLeftStart = false;
+let hasPaintedStart = false;
 let lastTouchedId = null;
 
 if (boardSvg) {
     boardSvg.addEventListener('mousedown', (e) => {
+        // Mouse only
         e.preventDefault();
         isDrawing = true;
     });
 
     // Touch handling for the board (dragging)
     boardSvg.addEventListener('touchmove', (e) => {
-        e.preventDefault(); // Prevent scrolling
-        if (!isDrawing) return;
+        if (e.touches.length > 1) {
+            isMultiTouch = true;
+            isDrawing = false;
+            return;
+        }
+        
+        if (isMultiTouch || !isDrawing) return;
+
+        e.preventDefault(); // Prevent scrolling only if we are drawing
 
         const touch = e.touches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
 
         if (target && target.tagName === 'circle' && target.hasAttribute('data-id')) {
             const id = target.getAttribute('data-id');
-            if (id !== lastTouchedId) {
-                applyTool(id, target, true);
-                lastTouchedId = id;
+            
+            // If we moved to a new hold
+            if (id !== startId) {
+                hasLeftStart = true;
+                
+                // Ensure we paint the starting hold if we haven't yet (drag start)
+                if (!hasPaintedStart && startId) {
+                    const startCircle = container.querySelector(`circle[data-id="${startId}"]`);
+                    if (startCircle) {
+                        applyTool(startId, startCircle, true);
+                        hasPaintedStart = true;
+                    }
+                }
+                
+                // Paint the current hold
+                if (id !== lastTouchedId) {
+                    applyTool(id, target, true);
+                    lastTouchedId = id;
+                }
             }
         }
     }, { passive: false });
 
     // Ensure drawing stops on touch end
-    boardSvg.addEventListener('touchend', () => {
+    document.addEventListener('touchend', (e) => {
+        if (isDrawing && !isMultiTouch && !hasLeftStart && startId) {
+            // It was a tap
+            const circle = container.querySelector(`circle[data-id="${startId}"]`);
+            if (circle) {
+                applyTool(startId, circle, false); // Toggle
+                if (e.cancelable) e.preventDefault(); // Prevent mouse emulation
+            }
+        }
+        
         isDrawing = false;
+        startId = null;
         lastTouchedId = null;
+        hasLeftStart = false;
+        hasPaintedStart = false;
+        // Don't reset isMultiTouch immediately if fingers are still down? 
+        // Actually, if all fingers lift, we reset.
+        if (e.touches.length === 0) {
+            isMultiTouch = false;
+        }
     });
     
-    // Also handle touchstart on background to start "drawing" (dragging)
+    // Handle touchstart on background (for dragging starting from empty space)
     boardSvg.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 1) {
+            isMultiTouch = true;
+            isDrawing = false;
+            return;
+        }
+        
         if (e.target === boardSvg || e.target.tagName === 'image') {
-             e.preventDefault();
              isDrawing = true;
+             isMultiTouch = false;
+             startId = null; // Started on background
+             hasLeftStart = true; // Effectively we are "moving"
+             hasPaintedStart = true; // Nothing to paint at start
         }
     }, { passive: false });
 }
@@ -234,10 +290,18 @@ document.addEventListener('mouseup', () => {
     isDrawing = false;
 });
 
-document.addEventListener('touchend', () => {
-    isDrawing = false;
-    lastTouchedId = null;
-});
+// Removed global touchend listener here as it is now handled inside the boardSvg block
+// to have access to closure variables like startId correctly if needed, 
+// or we can keep it global if we move variables to global scope.
+// The variables are in the outer scope of render(), so we are good.
+// But wait, render() is called once. The variables are global to the script.
+// Let's just clean up the old listener if it exists or ensure we don't duplicate.
+// The previous code had:
+// document.addEventListener('touchend', () => {
+//    isDrawing = false;
+//    lastTouchedId = null;
+// });
+// I replaced it inside the if(boardSvg) block.
 
 function applyTool(id, circle, isDrag) {
     if (currentTool === 'eraser') {
@@ -307,10 +371,19 @@ function render() {
         });
 
         circle.addEventListener("touchstart", (e) => {
-            e.preventDefault();
+            if (e.touches.length > 1) {
+                isMultiTouch = true;
+                isDrawing = false;
+                return;
+            }
+            
+            // Don't prevent default here to allow pinch-zoom to start
             isDrawing = true;
+            isMultiTouch = false;
+            startId = id;
+            hasLeftStart = false;
+            hasPaintedStart = false;
             lastTouchedId = id;
-            applyTool(id, circle, false);
         }, { passive: false });
 
         container.appendChild(circle);
