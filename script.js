@@ -129,6 +129,12 @@ function illuminateClimb(board, bluetoothPacket) {
       );
     })
     .then(() => console.log("Climb illuminated"))
+    .then(() => {
+      if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+        bluetoothDevice.gatt.disconnect();
+        console.log("Disconnected from device");
+      }
+    })
     .catch((error) => {
       if (error.message !== BLUETOOTH_CANCELLED) {
         const message =
